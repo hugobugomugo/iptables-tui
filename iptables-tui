@@ -1,0 +1,139 @@
+#!/bin/env bash
+
+#ohne fzf/dialog verpisst du dich
+if ! command -v fzf &>/dev/null || ! command -v dialog &>/dev/null; then
+    echo "fzf and/or dialog is missing"
+    exit 1
+fi
+
+view_rules() {
+    iptables -vnL | less
+}
+
+add_rule() {
+    while true; do
+        CHAIN=$(dialog --menu "Select chain:" 15 40 4 \
+            INPUT "Inbound Traffic" \
+            OUTPUT "Outbound Traffic" \
+            FORWARD "Forwarded Traffic" \
+            BACK "Go Back" 2>&1 >/dev/tty)
+        [[ "$CHAIN" == "BACK" || -z "$CHAIN" ]] && return
+
+        PROTOCOL=$(dialog --menu "Select protocol:" 15 40 4 \
+            tcp "TCP" \
+            udp "UDP" \
+            all "All Protocols" \
+            BACK "Go Back" 2>&1 >/dev/tty)
+        [[ "$PROTOCOL" == "BACK" || -z "$PROTOCOL" ]] && continue
+
+        SOURCE=$(dialog --inputbox "Enter source IP (leave blank for any):" 10 40 2>&1 >/dev/tty)
+        [[ "$SOURCE" == "BACK" ]] && continue
+        [[ -n "$SOURCE" ]] && SOURCE_RULE="-s $SOURCE" || SOURCE_RULE=""
+
+        DESTINATION=$(dialog --inputbox "Enter destination IP (leave blank for any):" 10 40 2>&1 >/dev/tty)
+        [[ "$DESTINATION" == "BACK" ]] && continue
+        [[ -n "$DESTINATION" ]] && DEST_RULE="-d $DESTINATION" || DEST_RULE=""
+
+	#this shit isnt working for some reasonb
+        PORT=$(dialog --inputbox "Enter port number (leave blank for any):" 10 40 2>&1 >/dev/tty)
+        [[ "$PORT" == "BACK" ]] && continue
+        [[ -n "$PORT" ]] && PORT_RULE="--dport $PORT" || PORT_RULE=""
+
+        STATE=$(dialog --checklist "Select connection state (optional):" 15 50 5 \
+            NEW "New connections" off \
+            ESTABLISHED "Existing connections" off \
+            RELATED "Related to an existing connection" off \
+            INVALID "Unidentifiable traffic" off \
+            BACK "Go Back" off 2>&1 >/dev/tty)
+        [[ "$STATE" == "BACK" ]] && continue
+        [[ -n "$STATE" ]] && STATE_RULE="-m conntrack --ctstate $(echo $STATE | tr -d '\"' | tr ' ' ',')" || STATE_RULE=""
+
+        ACTION=$(dialog --menu "Select action:" 15 40 4 \
+            ACCEPT "Allow" \
+            DROP "Deny" \
+            REJECT "Reject" \
+            BACK "Go Back" 2>&1 >/dev/tty)
+        [[ "$ACTION" == "BACK" || -z "$ACTION" ]] && continue
+
+        RULE="-A $CHAIN $SOURCE_RULE $DEST_RULE $STATE_RULE"
+        [[ "$PROTOCOL" != "all" ]] && RULE="$RULE -p $PROTOCOL"
+        [[ -n "$PORT_RULE" && "$PROTOCOL" != "all" ]] && RULE="$RULE $PORT_RULE"
+        RULE="$RULE -j $ACTION"
+
+        dialog --yesno "Apply rule: iptables $RULE?" 10 50
+        if [[ $? -eq 0 ]]; then
+            iptables $RULE
+        fi
+    done
+}
+
+delete_rule() {
+    while true; do
+        RULES=$(iptables -nL --line-numbers)
+
+        SELECTED_RULE=$(echo "$RULES" | fzf +s --reverse --prompt="Select rule to delete:")
+
+        #vielleicht mit regex check 1-9 ersetzen, sollte besser sein
+        if [[ "$SELECTED_RULE" =~ ^(Chain|num) ]]; then
+                echo "I dont think you want to delete this"
+                return
+        fi
+
+        [[ -z "$SELECTED_RULE" ]] && echo "no selection made" && return
+
+        RULE_NUM="${SELECTED_RULE%% *}"
+        CHAIN=$(echo "$SELECTED_RULE" | awk '{print $2}')
+
+
+	#glaube das sollte && sein und nicht ||
+        if [[ -z "$RULE_NUM" || -z "$CHAIN" ]]; then
+            dialog --msgbox "Invalid selection!" 5 30
+            return
+        fi
+
+	#vielleicht loop mit regex check um herauszufinden ob input/output/forward, klingt wie ziemliche hundescheisse
+
+        dialog --yesno "Delete rule $RULE_NUM from chain $CHAIN?" 10 40
+        if [[ $? -eq 0 ]]; then
+            iptables -D $CHAIN $RULE_NUM
+            if [[ $? -eq 0 ]]; then
+                dialog --msgbox "Rule deleted!" 5 30
+            else
+                dialog --msgbox "Failed to delete rule. Please check the rule number and chain." 5 30
+            fi
+        fi
+    done
+}
+
+save_rules() {
+    iptables-save | sudo tee /etc/iptables/rules.v4
+    dialog --msgbox "Rules saved!" 5 30
+}
+
+enable_ssh_protection() {
+    dialog --yesno "Enable SSH brute-force protection? (Max 5 attempts per minute per IP)" 10 50
+    if [[ $? -eq 0 ]]; then
+        iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set --name SSH
+        iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 5 --rttl --name SSH -j DROP
+        dialog --msgbox "SSH protection enabled!" 5 40
+    fi
+}
+
+while true; do
+    CHOICE=$(dialog --clear --title "iptables Manager" --menu "Choose an option:" 15 50 7 \
+    1 "View Rules" \
+    2 "Add Rule" \
+    3 "Delete Rule" \
+    4 "Save Rules" \
+    5 "Enable SSH Protection" \
+    6 "Exit" 2>&1 >/dev/tty)
+
+    case $CHOICE in
+        1) view_rules ;;
+        2) add_rule ;;
+        3) delete_rule ;;
+        4) save_rules ;;
+        5) enable_ssh_protection ;;
+        6) exit 0 ;;
+    esac
+done
