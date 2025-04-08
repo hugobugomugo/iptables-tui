@@ -1,19 +1,18 @@
 # iptables-tui
-nmtui inspired but not nmtui iptables gui
+## nmtui inspired but not nmtui iptables gui
 
 
-This tool is NOT ready for production. Make a backup of your iptables configuration before using this tool.
+This tool is **NOT** ready for production. Make a backup of your iptables configuration before using this tool.
 
 Use at your own risk.
 
 
-Install:
-
+### Install:
+```
+apt install iptables iptables-persistent fzf dialog
 curl -L https://raw.githubusercontent.com/hugobugomugo/iptables-tui/refs/heads/master/iptables-tui -o /usr/local/bin/iptables-tui
-chmod +X /usr/local/bin/iptables-tui
-
-
-
+chmod +x /usr/local/bin/iptables-tui
+```
 
 Copyright 2025 hugobugomugo
 
@@ -23,7 +22,7 @@ modify, and distribute the Software for non-commercial purposes only, subject to
 
 1. **Attribution** must be given to the original author.
 2. **Commercial use is prohibited**. This includes selling the software,
-   bundling it into proprietary software, or offering it as part of a paid service.
+   bundling it into proprietary software, or offering it as a paid service.
 3. **Derivatives must remain open source** and licensed under the same terms.
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+All copies or substantial portions of the Software must include the above copyright notice and this permission notice.
