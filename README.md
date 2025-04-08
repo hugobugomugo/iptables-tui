@@ -2,6 +2,16 @@
 nmtui inspired but not nmtui iptables gui
 
 
+This tool is NOT ready for production. Make a backup of your iptables configuration before using this tool.
+
+Use at your own risk.
+
+
+Install:
+
+curl -L https://raw.githubusercontent.com/hugobugomugo/iptables-tui/refs/heads/master/iptables-tui -o /usr/local/bin/iptables-tui
+chmod +X /usr/local/bin/iptables-tui
+
 
 
 

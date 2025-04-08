@@ -1,6 +1,5 @@
 #!/bin/env bash
 
-#ohne fzf/dialog verpisst du dich
 if ! command -v fzf &>/dev/null || ! command -v dialog &>/dev/null; then
     echo "fzf and/or dialog is missing"
     exit 1
@@ -34,7 +33,6 @@ add_rule() {
         [[ "$DESTINATION" == "BACK" ]] && continue
         [[ -n "$DESTINATION" ]] && DEST_RULE="-d $DESTINATION" || DEST_RULE=""
 
-	#this shit isnt working for some reasonb
         PORT=$(dialog --inputbox "Enter port number (leave blank for any):" 10 40 2>&1 >/dev/tty)
         [[ "$PORT" == "BACK" ]] && continue
         [[ -n "$PORT" ]] && PORT_RULE="--dport $PORT" || PORT_RULE=""
@@ -68,55 +66,41 @@ add_rule() {
 }
 
 delete_rule() {
-    while true; do
-        RULES=$(iptables -nL --line-numbers)
-
-        SELECTED_RULE=$(echo "$RULES" | fzf +s --reverse --prompt="Select rule to delete:")
-
-        #vielleicht mit regex check 1-9 ersetzen, sollte besser sein
-        if [[ "$SELECTED_RULE" =~ ^(Chain|num) ]]; then
-                echo "I dont think you want to delete this"
-                return
+    declare -a DISPLAY_LINES=()
+    declare -a CHAIN_MAPPING=()
+    
+    CURRENT_CHAIN=""
+    
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^Chain\ ([A-Z]+)\  ]]; then
+            CURRENT_CHAIN="${BASH_REMATCH[1]}"
+            DISPLAY_LINES+=("$line")
+        elif [[ "$line" =~ ^\ *[0-9]+ ]]; then
+            DISPLAY_LINES+=("$line")
+            CHAIN_MAPPING+=("${#DISPLAY_LINES[@]}|$CURRENT_CHAIN|$line")
+        else
+            DISPLAY_LINES+=("$line")
         fi
-
-        [[ -z "$SELECTED_RULE" ]] && echo "no selection made" && return
-
-        RULE_NUM="${SELECTED_RULE%% *}"
-        CHAIN=$(echo "$SELECTED_RULE" | awk '{print $2}')
-
-
-	#glaube das sollte && sein und nicht ||
-        if [[ -z "$RULE_NUM" || -z "$CHAIN" ]]; then
-            dialog --msgbox "Invalid selection!" 5 30
-            return
-        fi
-
-	#vielleicht loop mit regex check um herauszufinden ob input/output/forward, klingt wie ziemliche hundescheisse
-
-        dialog --yesno "Delete rule $RULE_NUM from chain $CHAIN?" 10 40
-        if [[ $? -eq 0 ]]; then
-            iptables -D $CHAIN $RULE_NUM
-            if [[ $? -eq 0 ]]; then
-                dialog --msgbox "Rule deleted!" 5 30
-            else
-                dialog --msgbox "Failed to delete rule. Please check the rule number and chain." 5 30
-            fi
+    done < <(iptables -vnL)
+    
+    SELECTED=$(printf "%s\n" "${DISPLAY_LINES[@]}" | fzf +s --reverse)
+    
+    [[ -z "$SELECTED" ]] && echo "exited" && exit 1
+    
+    for entry in "${CHAIN_MAPPING[@]}"; do
+        IFS="|" read -r idx chain rule <<< "$entry"
+        if [[ "$rule" == "$SELECTED" ]]; then
+            RULE_NUM=$(iptables -L "$chain" -v -n --line-numbers | grep -F -n "$rule" | cut -d: -f1)
+            RULE_NUM=$((RULE_NUM - 2))
+    	iptables -D $chain $RULE_NUM
         fi
     done
+    echo "no selection detected."
 }
 
 save_rules() {
     iptables-save | sudo tee /etc/iptables/rules.v4
     dialog --msgbox "Rules saved!" 5 30
-}
-
-enable_ssh_protection() {
-    dialog --yesno "Enable SSH brute-force protection? (Max 5 attempts per minute per IP)" 10 50
-    if [[ $? -eq 0 ]]; then
-        iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set --name SSH
-        iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 5 --rttl --name SSH -j DROP
-        dialog --msgbox "SSH protection enabled!" 5 40
-    fi
 }
 
 while true; do
