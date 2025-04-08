@@ -12,6 +12,7 @@ Use at your own risk.
 apt install iptables iptables-persistent fzf dialog
 curl -L https://raw.githubusercontent.com/hugobugomugo/iptables-tui/refs/heads/master/iptables-tui -o /usr/local/bin/iptables-tui
 chmod +x /usr/local/bin/iptables-tui
+ln -s /usr/local/bin/iptables-tui /usr/local/bin/iptui
 ```
 
 Copyright 2025 hugobugomugo
