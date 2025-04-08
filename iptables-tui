@@ -1,5 +1,5 @@
-#!/bin/env bash
 
+#!/bin/env bash
 if ! command -v fzf &>/dev/null || ! command -v dialog &>/dev/null; then
     echo "fzf and/or dialog is missing"
     exit 1
@@ -109,15 +109,13 @@ while true; do
     2 "Add Rule" \
     3 "Delete Rule" \
     4 "Save Rules" \
-    5 "Enable SSH Protection" \
-    6 "Exit" 2>&1 >/dev/tty)
+    5 "Exit" 2>&1 >/dev/tty)
 
     case $CHOICE in
         1) view_rules ;;
         2) add_rule ;;
         3) delete_rule ;;
         4) save_rules ;;
-        5) enable_ssh_protection ;;
-        6) exit 0 ;;
+        5) exit 0 ;;
     esac
 done
