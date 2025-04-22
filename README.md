@@ -15,6 +15,11 @@ chmod +x /usr/local/bin/iptables-tui
 ln -s /usr/local/bin/iptables-tui /usr/local/bin/iptui
 ```
 
+### Roadmap:
+- [ ] add multi delete function
+- [ ] implement fzf selection into dialog
+
+<br>
 Copyright 2025 hugobugomugo
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
