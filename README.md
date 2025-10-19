@@ -17,3 +17,4 @@ chmod +x /usr/local/bin/iptui
 ### Roadmap:
 - [x] add multi delete function
 - ~~[ ] implement fzf selection into dialog~~
+- [ ] format "delete rules" to not break formatting
