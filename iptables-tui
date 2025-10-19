@@ -1,5 +1,5 @@
-
 #!/bin/env bash
+
 if ! command -v fzf &>/dev/null || ! command -v dialog &>/dev/null; then
     echo "fzf and/or dialog is missing"
     exit 1
@@ -66,36 +66,66 @@ add_rule() {
 }
 
 delete_rule() {
-    declare -a DISPLAY_LINES=()
-    declare -a CHAIN_MAPPING=()
-    
-    CURRENT_CHAIN=""
-    
+    if ! command -v dialog &>/dev/null; then
+        echo "Error: 'dialog' is not installed. Install it and try again."
+        return 1
+    fi
+
+    TMPFILE=$(mktemp)
+    declare -a DIALOG_OPTIONS=()
+    declare -A RULE_INFO=()
+
     while IFS= read -r line; do
-        if [[ "$line" =~ ^Chain\ ([A-Z]+)\  ]]; then
+        if [[ "$line" =~ ^Chain\ ([A-Z]+) ]]; then
             CURRENT_CHAIN="${BASH_REMATCH[1]}"
-            DISPLAY_LINES+=("$line")
-        elif [[ "$line" =~ ^\ *[0-9]+ ]]; then
-            DISPLAY_LINES+=("$line")
-            CHAIN_MAPPING+=("${#DISPLAY_LINES[@]}|$CURRENT_CHAIN|$line")
-        else
-            DISPLAY_LINES+=("$line")
+        elif [[ "$line" =~ ^[[:space:]]*([0-9]+)[[:space:]] ]]; then
+            LINE_NUM="${BASH_REMATCH[1]}"
+            RULE_DESC=$(echo "$line" | awk '{$1=""; print $0}' | sed 's/^[[:space:]]*//;s/[[:space:]]\+/ /g')
+            ID="${CURRENT_CHAIN}:${LINE_NUM}"
+
+            RULE_INFO["$ID"]="$CURRENT_CHAIN|$LINE_NUM"
+
+            SHORT_DESC=$(echo "$RULE_DESC" | cut -c1-70)
+            DIALOG_OPTIONS+=("$ID" "$CURRENT_CHAIN: $SHORT_DESC" "off")
         fi
-    done < <(iptables -vnL)
-    
-    SELECTED=$(printf "%s\n" "${DISPLAY_LINES[@]}" | fzf +s --reverse)
-    
-    [[ -z "$SELECTED" ]] && echo "exited" && exit 1
-    
-    for entry in "${CHAIN_MAPPING[@]}"; do
-        IFS="|" read -r idx chain rule <<< "$entry"
-        if [[ "$rule" == "$SELECTED" ]]; then
-            RULE_NUM=$(iptables -L "$chain" -v -n --line-numbers | grep -F -n "$rule" | cut -d: -f1)
-            RULE_NUM=$((RULE_NUM - 2))
-    	iptables -D $chain $RULE_NUM
-        fi
+    done < <(iptables -L -n --line-numbers)
+
+    if [[ ${#DIALOG_OPTIONS[@]} -eq 0 ]]; then
+        dialog --msgbox "No iptables rules found to delete." 8 50
+        return 0
+    fi
+
+    dialog --checklist "Select iptables rules to delete:" 20 100 15 \
+        "${DIALOG_OPTIONS[@]}" 2> "$TMPFILE"
+
+    RET=$?
+    if [[ $RET -ne 0 ]]; then
+        echo "User cancelled."
+        rm -f "$TMPFILE"
+        return 1
+    fi
+
+    SELECTED_IDS=$(<"$TMPFILE")
+    rm -f "$TMPFILE"
+
+    declare -A TO_DELETE=()
+
+    for ID in $SELECTED_IDS; do
+        ID="${ID//\"/}"
+        IFS="|" read -r chain line_num <<< "${RULE_INFO[$ID]}"
+        TO_DELETE["$chain"]+="$line_num"$'\n'
     done
-    echo "no selection detected."
+
+    for chain in "${!TO_DELETE[@]}"; do
+        while IFS= read -r num; do
+            [[ -n "$num" ]] && {
+                echo "Deleting rule $num from $chain"
+                iptables -D "$chain" "$num"
+            }
+        done < <(printf "%s" "${TO_DELETE[$chain]}" | sort -nr)
+    done
+
+    dialog --msgbox "Selected rules deleted." 6 40
 }
 
 save_rules() {
