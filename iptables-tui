@@ -1,5 +1,8 @@
 #!/bin/env bash
 
+#make screen not blue
+trap "clear; reset; stty sane" EXIT
+
 if ! command -v fzf &>/dev/null || ! command -v dialog &>/dev/null; then
     echo "fzf and/or dialog is missing"
     exit 1
